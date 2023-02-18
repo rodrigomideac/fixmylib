@@ -1,0 +1,19 @@
+version: "2"
+services:
+  fixmylib:
+    build:
+      context: ../../.
+      dockerfile: Dockerfile
+    image: fixmylib:latest
+    group_add:
+      - "109"
+      - "989"
+    environment:
+      RUST_LOG: debug
+    volumes:
+      - ./config_for_docker:/config
+      - ./db:/db
+      - ./media-out:/media-out
+      - ../media-in:/media-in
+    devices:
+      - /dev/dri:/dev/dri

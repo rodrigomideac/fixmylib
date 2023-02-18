@@ -1,0 +1,5 @@
+/target
+*.db
+/config
+/docker-compose.yaml
+.idea
