@@ -4,7 +4,7 @@ services:
     build:
       context: ../../.
       dockerfile: Dockerfile
-    image: fixmylib:latest
+    image: ghcr.io/rodrigomideac/fixmylib:latest
     group_add:
       - "109"
       - "989"
