@@ -1,9 +1,6 @@
 version: "2"
 services:
   fixmylib:
-    build:
-      context: ../../.
-      dockerfile: Dockerfile
     image: ghcr.io/rodrigomideac/fixmylib:latest
     group_add:
       - "109"
