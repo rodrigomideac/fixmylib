@@ -2,8 +2,6 @@ name: fixmylib docker build and push to GHCR
 
 on:
   push:
-    branches:
-      - master
     tags:
       - v*
 
