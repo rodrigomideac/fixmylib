@@ -3,3 +3,4 @@
 /config
 /docker-compose.yaml
 .idea
+.env

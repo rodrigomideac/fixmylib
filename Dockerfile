@@ -7,7 +7,8 @@ RUN sed -i 's#src/main.rs#dummy.rs#' Cargo.toml
 RUN cargo build --release
 RUN sed -i 's#dummy.rs#src/main.rs#' Cargo.toml
 COPY src src
-COPY builtins builtins2
+COPY sqlx-data.json sqlx-data.json
+COPY migrations migrations
 RUN cargo build --release
 CMD ["/bin/bash"]
 
@@ -52,11 +53,12 @@ RUN mkdir -p \
             mesa-va-drivers
 
 COPY --from=builder /opt/fixmylib/target/release/fixmylib /usr/local/bin/fixmylib
-COPY builtins /opt/fixmylib/bultins
 ENV LIBVA_DRIVER_NAME="iHD"
-ENV BUILTINS_FOLDER_PATH=/opt/fixmylib/bultins
-ENV CONFIG_FOLDER_PATH=/config
-ENV DB_FOLDER_PATH=/db
+ENV DATABASE_URL="postgresql://postgres:fixmylib@localhost/postgres"
+ENV RUST_LOG="fixmylib=info,sqlx=warn"
+ENV INPUT_FOLDER=/media-in
+ENV OUTPUT_FOLDER=/media-out
+ENV SCANNER_THREADS=4
 
 USER fixmylib
 ENTRYPOINT ["fixmylib"]

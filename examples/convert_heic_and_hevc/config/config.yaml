@@ -1,8 +1,0 @@
-presets:
-  - name: builtins/h264_and_jpeg_converter
-    args:
-      input_folder: "./examples/media-in"
-      working_dir: "./examples/convert_heic_and_hevc/media-out"       # this is also the output folder
-      concurrency: 16                                                 # Number of workers for non-video conversion tasks
-      concurrency_video_conversion: 4                                 # Number of workers for video conversion tasks
-      jpeg_quality: 75%                                               # Argument for image-magick convert tool
