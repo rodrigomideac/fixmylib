@@ -1,15 +1,22 @@
 version: "2"
 services:
+  fixmylib-db:
+    image: postgres:14
+    ports:
+      - "5432:5432"
+    volumes:
+      - /tmp/postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=fixmylib
+
   fixmylib:
     image: ghcr.io/rodrigomideac/fixmylib:latest
     group_add:
       - "109"
       - "989"
     environment:
-      RUST_LOG: debug
+      - DATABASE_URL=postgresql://postgres:fixmylib@fixmylib-db/postgres
     volumes:
-      - ./config_for_docker:/config
-      - ./db:/db
       - ./media-out:/media-out
       - ../media-in:/media-in
     devices:

@@ -1,26 +1,21 @@
 # fixmylib
 
-This will go through a media library and convert it to a given preset. It works by running a shell script against folders and files.
+This project converts photos and videos to lower resolutions and more widely accepted formats for playback. Currently, two presets are created:
 
-The Docker image contains `exiftool`, `ffmpeg` and `image-magick` with all available delegates (including for HEIC format). The motivation for this project was to convert a media library with HEVC videos and HEIF photos to H264 and JPEG, respectively, for better playback compatibility. 
+|  Preset name  |    Image extension     | Image minimum width/height* | Video codec  | Video minimum width/height* |
+|:-------------:|:----------------------:|:---------------------------:|:------------:|:---------------------------:|
+|   thumbnail   |          JPEG          |            400px            |   H264/AVC   |            320px            |
+|    preview    |          JPEG          |           1280px            |   H264/AVC   |           1280px            |
+*: Media aspect ratio will be respected.
 
-Limitations:
-- Hardware transcoding has been tested with VA-API on an Intel i3-8100T with Intel HD Graphics 630 with Proxmox as supervisor and GPU passthrough to a virtual machine;
-- No software transcoding fallback yet;
-- This tool makes no assumptions about the type of the file being processed, thus the scripts sometimes need to perform extra work, such as checking if the video is already in h264 format;
-- Only one preset developed: `h264_and_jpeg_converter`.
+Features:
+- Video hardware transcoding for Intel iGPUs using VA-API, with fallback to software transcoding if HW transcoding fails;
+- Converted videos will keep relevant video metadata;
+- Any file with MIME type `image` or `video` are elegible to be tried to be converted;
+
+The motivation for this project was to convert a media library with HEVC videos and HEIF photos to H264 and JPEG, respectively, for better playback compatibility. Also, it works great if you want to have small backups (compromising quality) of your media library that can fit in SD cards. 
 
 ## Getting started
-
-You need to have installed `ffmpeg` and `image-magick` with HEIF delegate to run the example:
-
-```bash
-cargo run -- --config-folder-path examples/convert_heic_and_hevc/config --db-folder-path examples/convert_heic_and_hevc/db
-```
-
-There is a SQLite DB which stores data about each file and folder processed. You can have a look at its contents using a tool such as [DBeaver](https://github.com/dbeaver/dbeaver).
-
-## Getting started - Docker
 
 To run the example without needing to install any dependencies besides Docker compose:
 
@@ -31,43 +26,48 @@ docker compose build && docker compose run --rm fixmylib
 
 The generated files will be on `examples/convert_heic_and_hevc/media-out`.
 
-# Configure for your needs
+## Configure for your needs
 
-First create a `config.yaml` in a folder, for example in `~/apps/fixmylib/config`:
-
-```yaml
-presets:
-  - name: builtins/h264_and_jpeg_converter
-    args:
-      input_folder: "/media-in"
-      working_dir: "/media-out"         # this is also the output folder
-      concurrency: 16                   # Number of workers for non-video conversion tasks
-      concurrency_video_conversion: 4   # Number of workers for video conversion tasks
-      jpeg_quality: 75%                 # Argument for image-magick convert tool
-```
-
-Create a folder to store the SQLite DB, like `~/apps/fixmylib/db`.
-
-Create a `docker-compose.yaml` file, with the original media folder, and the output folder:
+Create a `docker-compose.yaml` file with these contents and customize by your needs:
 
 ```yaml
 version: "2"
 services:
+  fixmylib-db:
+    image: postgres:14
+    ports:
+      - "5432:5432"
+    volumes:
+      - ~/apps/fixmylib/db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=fixmylib
+
   fixmylib:
     image: ghcr.io/rodrigomideac/fixmylib:latest
     group_add:
       - "109"
       - "989"
+    environment:
+      - DATABASE_URL=postgresql://postgres:fixmylib@fixmylib-db/postgres
     volumes:
-      - ~/apps/fixmylib/config:/config
-      - ~/apps/fixmylib/db:/db
-      - ~/media_lib_original:/media-in
-      - ~/media_lib_transcoded:/media-out
+      - ~/apps/fixmylib/media-out:/media-out
+      - /path/to/your/media:/media-in
     devices:
       - /dev/dri:/dev/dri
+
 ```
 
-Now run it with `docker compose run --rm fixmylib`.
+Now run it with `docker compose up`.
+
+Any failed conversion can be checked in the Postgres table `file_jobs`. You can use a tool such as [DBeaver](https://github.com/dbeaver/dbeaver) to do so. 
+
+## Project Vision and Roadmap
+This project has the aspiration of being a [photoview](https://github.com/photoview/photoview) but with write features. Upcoming features:
+
+- Generate conversion report to make it easier to debug why conversion failed;
+- Store media data in the database;
+- API to list and serve media;
+- Frontend to view the media library;
 
 ## Alternatives
 [Tdarr](https://github.com/HaveAGitGat/Tdarr) worked great for its purpose of having a way to convert videos to a desired preset. However, I found its UI a little confusing, and it lacked capability to convert photos. 
