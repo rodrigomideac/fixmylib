@@ -6,6 +6,7 @@ This project converts photos and videos to lower resolutions and more widely acc
 |:-------------:|:----------------------:|:---------------------------:|:------------:|:---------------------------:|
 |   thumbnail   |          JPEG          |            400px            |   H264/AVC   |            320px            |
 |    preview    |          JPEG          |           1280px            |   H264/AVC   |           1280px            |
+
 *: Media aspect ratio will be respected.
 
 Features:
