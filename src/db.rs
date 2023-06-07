@@ -164,7 +164,6 @@ pub async fn get_folders(db: &Pool<Postgres>) -> Result<Vec<Folder>> {
 }
 
 pub async fn upsert_folder(db: &Pool<Postgres>, folder: Folder) -> Result<Folder> {
-    info!("Going to insert {:?}", folder);
     let folder = sqlx::query_as!(
         Folder,
         r#"

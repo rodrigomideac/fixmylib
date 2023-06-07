@@ -30,8 +30,8 @@ impl CommandRunner {
             cwd: cwd.into(),
             cmd: "".to_string(),
         }
-        .with(r#"#!/bin/sh"#)
-        .with(r#"#set -e"#)
+            .with(r#"#!/bin/sh"#)
+            .with(r#"#set -e"#)
     }
 
     pub fn with(mut self, partial_cmd: impl AsRef<str>) -> CommandRunner {
@@ -124,8 +124,10 @@ impl FileToBeProcessed<'_> {
 
 pub async fn run(ctx: &AppContext) -> Result<()> {
     loop {
+        info!("Checking for unprocessed files...");
         for resolution in ["thumbnail", "preview"] {
             debug!("Creating jobs for resolution {resolution}");
+            let ticker = Ticker::new();
             create_file_jobs_for_unprocessed_files(ctx, resolution)
                 .await
                 .expect("it should work flawless to create file jobs");
@@ -133,10 +135,12 @@ pub async fn run(ctx: &AppContext) -> Result<()> {
                 .process_pending_file_jobs(resolution)
                 .await
                 .expect("it should work flawless to process files");
+            ticker.elapsed(format!("to process unprocessed files for {resolution} preset."))
         }
-
-        info!("Done creating file jobs and processing files, checking again after 5s...");
-        sleep(Duration::from_millis(5000)).await;
+        sleep(Duration::from_secs(
+            ctx.config.seconds_between_processor_runs,
+        ))
+            .await;
     }
 }
 
@@ -145,7 +149,8 @@ pub async fn create_file_jobs_for_unprocessed_files(
     resolution: &str,
 ) -> Result<()> {
     let mut offset = 0;
-    let limit = 5;
+    let limit = 100;
+    let mut count = 0;
     loop {
         let files =
             db::get_unprocessed_files_for_a_given_job_name(&ctx.db, resolution, offset, limit)
@@ -153,14 +158,14 @@ pub async fn create_file_jobs_for_unprocessed_files(
         if files.is_empty() {
             break;
         }
-        info!(
-            "[CREATEJOB] Found {} unprocessed files for {}:",
+        debug!(
+            "Found {} unprocessed files for {}:",
             files.len(),
             resolution
         );
 
         for x in files.iter() {
-            info!("{}", x.file_full_path)
+            debug!("{}", x.file_full_path)
         }
 
         let jobs: Vec<FileJob> = files
@@ -177,7 +182,7 @@ pub async fn create_file_jobs_for_unprocessed_files(
             .collect();
         for job in jobs {
             match db::upsert_file_job(&ctx.db, job).await {
-                Ok(_) => {}
+                Ok(_) => { count += 1 }
                 Err(e) => {
                     error!("Failure inserting file_job: {e}")
                 }
@@ -186,6 +191,7 @@ pub async fn create_file_jobs_for_unprocessed_files(
 
         offset += limit;
     }
+    info!("Created {count} jobs to process files.");
     Ok(())
 }
 
@@ -208,26 +214,21 @@ impl Processor<'_> {
         let limit = 100;
         let mut count = 0;
         loop {
-            let tick = Ticker::new();
             let files = db::get_unprocessed_files_for_a_given_job_name(
                 &self.ctx.db,
                 resolution,
                 offset,
                 limit,
             )
-            .await?;
+                .await?;
 
             if files.is_empty() {
-                info!("***** finished processing pending files. Processed {count} files.");
-                break Ok(());
+                break;
             }
-            info!(
-                "***** begin processing pending files. Found {} files...",
-                files.len()
-            );
+            info!("Processing {} files...", files.len());
 
             for x in files.iter() {
-                info!("{}", x.file_full_path)
+                debug!("{}", x.file_full_path)
             }
 
             for (
@@ -248,14 +249,15 @@ impl Processor<'_> {
                     Some(command_log),
                     Some(has_succeeded),
                 )
-                .await?;
-                info!("Success marking {} as completed", &file.file_full_path);
+                    .await?;
+                debug!("Success marking {} as completed", &file.file_full_path);
                 count += 1;
             }
 
             offset += limit;
-            tick.elapsed();
         }
+        info!("Processed {count} files.");
+        Ok(())
     }
 
     fn process_files(&self, files: Vec<File>, resolution: &str) -> Vec<(File, ProcessingResult)> {
@@ -263,6 +265,7 @@ impl Processor<'_> {
             Success((File, Exiftool)),
             Failure((File, ProcessingResult)),
         }
+        let files_count = files.len();
         let exifs: Vec<ExifProcessing> = files
             .into_iter()
             .map(|file| match exiftool_on_file(&file.file_full_path) {
@@ -280,7 +283,9 @@ impl Processor<'_> {
         let (success_exifs, failed_exifs): (Vec<_>, Vec<_>) = exifs
             .into_iter()
             .partition(|e| matches!(e, ExifProcessing::Success(_)));
-
+        if !failed_exifs.is_empty() {
+            info!("Failure to extract file types of {} files.",failed_exifs.len());
+        }
         let (media_files, non_media_files): (Vec<_>, Vec<_>) = success_exifs
             .into_iter()
             .flat_map(|e| match e {
@@ -299,13 +304,20 @@ impl Processor<'_> {
         let (image_files, video_files): (Vec<_>, Vec<_>) =
             media_files.into_iter().partition(|f| f.is_image());
 
+        info!("Found {} images, {} videos and {} non media files out of {} files.",
+            image_files.len(),
+            video_files.len(),
+            non_media_files.len(),
+            files_count
+        );
+        info!("Processing images...");
         let images_processed: Vec<_> = image_files
             .clone()
             .into_iter()
             .zip(self.image_converter.convert_files(image_files))
             .map(|(f, r)| (f.file, r))
             .collect();
-
+        info!("Processing videos...");
         let videos_processed: Vec<_> = video_files
             .clone()
             .into_iter()
@@ -344,6 +356,6 @@ impl Processor<'_> {
             non_media_files_processed,
             failed_exifs_processed,
         ]
-        .concat()
+            .concat()
     }
 }

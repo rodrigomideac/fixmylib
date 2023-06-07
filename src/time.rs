@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use sqlx::types::time::{OffsetDateTime, PrimitiveDateTime};
 
 pub fn now() -> PrimitiveDateTime {
@@ -14,11 +15,12 @@ impl Ticker {
         Ticker { begin: now() }
     }
 
-    pub fn elapsed(&self) {
+    pub fn elapsed(&self, msg: impl Display) {
         let elapsed = now() - self.begin;
         info!(
-            "Elapsed {} s ",
-            elapsed.whole_milliseconds() as f64 / 1000.0
+            "Took {} seconds {}",
+            elapsed.whole_milliseconds() as f64 / 1000.0,
+            msg
         )
     }
 }

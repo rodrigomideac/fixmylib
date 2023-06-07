@@ -10,7 +10,7 @@ services:
       - POSTGRES_PASSWORD=fixmylib
 
   fixmylib:
-    image: ghcr.io/rodrigomideac/fixmylib:latest
+    image: ghcr.io/rodrigomideac/fixmylib:0.2.0
     group_add:
       - "109"
       - "989"

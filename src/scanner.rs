@@ -9,43 +9,47 @@ use anyhow::{Context, Result};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::ParallelBridge;
 use sqlx::types::time::{OffsetDateTime, PrimitiveDateTime};
+use std::time::Duration;
 use tokio::sync::mpsc::Sender;
+use tokio::time::sleep;
 use uuid::Uuid;
 use walkdir::{DirEntry, WalkDir};
 
 pub async fn run(ctx: &AppContext) -> anyhow::Result<()> {
-    let mut unfinished_scan_jobs = get_unfinished_filescan_jobs(&ctx.db).await?;
-    if unfinished_scan_jobs.is_empty() {
-        info!("No unfinished filescan job found, starting a new one");
-        let job = FilescanJob {
-            id: Uuid::new_v4(),
-            full_path: ctx.config.input_folder.clone(),
-            created_at: time::now(),
-            finished_at: None,
-        };
-        upsert_filescan_job(&ctx.db, job.clone()).await?;
-        unfinished_scan_jobs.push(job);
+    loop {
+        let mut unfinished_scan_jobs = get_unfinished_filescan_jobs(&ctx.db).await?;
+        if unfinished_scan_jobs.is_empty() {
+            info!("Starting new full scan for files on {}", ctx.config.input_folder.clone());
+            let job = FilescanJob {
+                id: Uuid::new_v4(),
+                full_path: ctx.config.input_folder.clone(),
+                created_at: time::now(),
+                finished_at: None,
+            };
+            upsert_filescan_job(&ctx.db, job.clone()).await?;
+            unfinished_scan_jobs.push(job);
+        }
+        for job in unfinished_scan_jobs {
+            run_job_for_folders(ctx, &job).await?;
+            run_job_for_files(ctx, job.clone()).await?;
+            upsert_filescan_job(
+                &ctx.db,
+                FilescanJob {
+                    finished_at: Some(time::now()),
+                    ..job
+                },
+            )
+                .await?;
+        }
+        debug!("Done scanning all filescanjobs");
+        sleep(Duration::from_secs(ctx.config.seconds_between_file_scans)).await;
     }
-    for job in unfinished_scan_jobs {
-        run_job_for_folders(ctx, &job).await?;
-        run_job_for_files(ctx, job.clone()).await?;
-        upsert_filescan_job(
-            &ctx.db,
-            FilescanJob {
-                finished_at: Some(time::now()),
-                ..job
-            },
-        )
-        .await?;
-    }
-    info!("Done scanning all filescanjobs");
-    Ok(())
 }
 
 async fn run_job_for_files(ctx: &AppContext, job: FilescanJob) -> Result<()> {
     let all_folders = get_folders(&ctx.db).await?;
     let (tx, mut rx) = tokio::sync::mpsc::channel::<File>(10);
-    info!("Going to search for files on {:?}", all_folders);
+    debug!("Going to search for files on {:?}", all_folders);
     tokio::spawn(async move {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(32)
@@ -53,16 +57,17 @@ async fn run_job_for_files(ctx: &AppContext, job: FilescanJob) -> Result<()> {
             .unwrap_or_else(|e| panic!("Failure initing threadpool: {e}"));
         pool.install(|| {
             all_folders.iter().par_bridge().for_each(|folder| {
-                info!("Iterating {:?}", folder);
+                debug!("Iterating {}", folder.folder_full_path);
                 process_folder_for_file_job(&job, folder, tx.clone());
             });
         });
     });
-
-    info!("Waiting on channel");
+    let mut count = 0;
     while let Some(file) = rx.recv().await {
         upsert_file(&ctx.db, file).await?;
+        count += 1;
     }
+    info!("Found {count} files.");
     Ok(())
 }
 
@@ -73,7 +78,7 @@ fn process_folder_for_file_job(job: &FilescanJob, folder: &Folder, tx: Sender<Fi
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.metadata().is_ok() && entry.metadata().unwrap().is_file())
     {
-        info!("Found file: {:?}", entry);
+        debug!("Found file: {:?}", entry);
         let entry = EntryProperties {
             entry: &entry,
             root: &folder.folder_full_path,
@@ -113,12 +118,12 @@ async fn process_folder_entry(
     job_id: Uuid,
 ) -> Result<()> {
     let updated_folder = if let Some(folder) = get_folder(&ctx.db, entry.full_path()?).await? {
-        info!("Folder {} already exists on DB", entry.full_path()?);
+        debug!("Folder {} already exists on DB", entry.full_path()?);
         Folder { job_id, ..folder }
     } else {
-        info!("Folder {} do not exists on DB", entry.full_path()?);
+        debug!("Folder {} do not exists on DB", entry.full_path()?);
         let parent_folder_full_path = if entry.full_path()?.as_str() == entry.root {
-            info!(
+            debug!(
                 "Folder {} is root, overriding parent path ",
                 entry.full_path()?
             );

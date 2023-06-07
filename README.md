@@ -22,7 +22,7 @@ To run the example without needing to install any dependencies besides Docker co
 
 ```bash
 cd examples/convert_heic_and_hevc
-docker compose build && docker compose run --rm fixmylib
+docker compose build && docker compose up
 ```
 
 The generated files will be on `examples/convert_heic_and_hevc/media-out`.

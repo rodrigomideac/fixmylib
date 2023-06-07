@@ -14,4 +14,10 @@ pub struct Config {
 
     #[arg(short, long, env)]
     pub scanner_threads: usize,
+
+    #[arg(long, env)]
+    pub seconds_between_file_scans: u64,
+
+    #[arg(long, env)]
+    pub seconds_between_processor_runs: u64,
 }
