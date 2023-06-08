@@ -131,11 +131,13 @@ pub async fn run(ctx: &AppContext) -> Result<()> {
             create_file_jobs_for_unprocessed_files(ctx, resolution)
                 .await
                 .expect("it should work flawless to create file jobs");
-            Processor::new(ctx)
+            let processed_files_count = Processor::new(ctx)
                 .process_pending_file_jobs(resolution)
                 .await
                 .expect("it should work flawless to process files");
-            ticker.elapsed(format!("to process unprocessed files for {resolution} preset."))
+            if processed_files_count != 0 {
+                ticker.elapsed(format!("to process unprocessed files for {resolution} preset."))
+            }
         }
         sleep(Duration::from_secs(
             ctx.config.seconds_between_processor_runs,
@@ -191,7 +193,9 @@ pub async fn create_file_jobs_for_unprocessed_files(
 
         offset += limit;
     }
-    info!("Created {count} jobs to process files.");
+    if count != 0 {
+        info!("Created {count} jobs to process files.");
+    }
     Ok(())
 }
 
@@ -209,7 +213,7 @@ impl Processor<'_> {
             ctx,
         }
     }
-    pub async fn process_pending_file_jobs(&self, resolution: &str) -> Result<()> {
+    pub async fn process_pending_file_jobs(&self, resolution: &str) -> Result<i32> {
         let mut offset = 0;
         let limit = 100;
         let mut count = 0;
@@ -256,8 +260,10 @@ impl Processor<'_> {
 
             offset += limit;
         }
-        info!("Processed {count} files.");
-        Ok(())
+        if count != 0{
+            info!("Processed {count} files.");
+        }
+        Ok(count)
     }
 
     fn process_files(&self, files: Vec<File>, resolution: &str) -> Vec<(File, ProcessingResult)> {
