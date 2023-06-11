@@ -31,7 +31,7 @@ impl CommandRunner {
             cmd: "".to_string(),
         }
             .with(r#"#!/bin/sh"#)
-            .with(r#"#set -e"#)
+            .with(r#"set -e"#)
     }
 
     pub fn with(mut self, partial_cmd: impl AsRef<str>) -> CommandRunner {
