@@ -254,7 +254,7 @@ pub async fn upsert_file(db: &Pool<Postgres>, file: File) -> Result<File> {
 
 pub async fn get_unprocessed_files_for_a_given_job_name(
     db: &Pool<Postgres>,
-    resolution: &str,
+    preset_name: &str,
     offset: i64,
     limit: i64,
 ) -> Result<Vec<File>> {
@@ -280,7 +280,7 @@ pub async fn get_unprocessed_files_for_a_given_job_name(
              OFFSET $2 ROWS
              FETCH NEXT $3 ROWS ONLY
              "#,
-        resolution,
+        preset_name,
         offset,
         limit
     )

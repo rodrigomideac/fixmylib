@@ -2,16 +2,17 @@ use crate::processor::{CommandRunner, FileToBeProcessed, ProcessingResult};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use rayon::ThreadPool;
+use crate::AppContext;
 
 pub struct ImageConverterProcessor {
     pool: ThreadPool,
 }
 
 impl ImageConverterProcessor {
-    pub fn new() -> ImageConverterProcessor {
+    pub fn new(ctx: &AppContext) -> ImageConverterProcessor {
         ImageConverterProcessor {
             pool: rayon::ThreadPoolBuilder::new()
-                .num_threads(8)
+                .num_threads(ctx.config.image_converter_threads)
                 .build()
                 .unwrap_or_else(|e| panic!("Failure initing threadpool for image processing: {e}")),
         }
@@ -42,7 +43,7 @@ impl ImageConverter<'_> {
     fn run(&self) -> ProcessingResult {
         CommandRunner::build(self.file.output_folder)
             .with(self.define_input_and_output_paths())
-            .with(match self.file.resolution {
+            .with(match self.file.preset_name {
                 "thumbnail" => self.convert_image_thumbnail(),
                 _ => self.convert_image_preview(),
             })

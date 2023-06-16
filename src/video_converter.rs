@@ -2,16 +2,17 @@ use crate::processor::{CommandRunner, FileToBeProcessed, ProcessingResult};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use rayon::ThreadPool;
+use crate::AppContext;
 
 pub struct VideoConverterProcessor {
     pool: ThreadPool,
 }
 
 impl VideoConverterProcessor {
-    pub fn new() -> VideoConverterProcessor {
+    pub fn new(ctx: &AppContext) -> VideoConverterProcessor {
         VideoConverterProcessor {
             pool: rayon::ThreadPoolBuilder::new()
-                .num_threads(2)
+                .num_threads(ctx.config.video_converter_threads)
                 .build()
                 .unwrap_or_else(|e| panic!("Failure initing threadpool for video processing: {e}")),
         }
@@ -52,7 +53,7 @@ impl VideoConverter<'_> {
     fn run_hw_transcoding_intel(&self) -> ProcessingResult {
         CommandRunner::build(self.file.output_folder)
             .with(self.define_input_and_output_paths())
-            .with(match self.file.resolution {
+            .with(match self.file.preset_name {
                 "thumbnail" => self.convert_video_preview_intel_hw_transcoding_thumbnail(),
                 _ => self.convert_video_preview_intel_hw_transcoding_preview(),
             })
@@ -64,7 +65,7 @@ impl VideoConverter<'_> {
     fn run_software_transcoding(&self) -> ProcessingResult {
         CommandRunner::build(self.file.output_folder)
             .with(self.define_input_and_output_paths())
-            .with(match self.file.resolution {
+            .with(match self.file.preset_name {
                 "thumbnail" => self.convert_video_preview_software_transcoding_thumbnail(),
                 _ => self.convert_video_preview_software_transcoding_preview(),
             })

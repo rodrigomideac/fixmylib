@@ -76,7 +76,7 @@ impl CommandRunner {
 pub struct FileToBeProcessed<'a> {
     pub root: &'a str,
     pub output_folder: &'a str,
-    pub resolution: &'a str,
+    pub preset_name: &'a str,
     pub file: File,
     pub exif: Exiftool,
 }
@@ -116,7 +116,7 @@ impl FileToBeProcessed<'_> {
     pub fn relative_path(&self) -> String {
         format!(
             "{}/{}",
-            self.resolution,
+            self.preset_name,
             self.folder_full_path().replacen(self.root, ".", 1)
         )
     }
@@ -125,18 +125,18 @@ impl FileToBeProcessed<'_> {
 pub async fn run(ctx: &AppContext) -> Result<()> {
     loop {
         info!("Checking for unprocessed files...");
-        for resolution in ["thumbnail", "preview"] {
-            debug!("Creating jobs for resolution {resolution}");
+        for preset_name in get_preset_names(ctx) {
+            debug!("Creating jobs for preset {preset_name}");
             let ticker = Ticker::new();
-            create_file_jobs_for_unprocessed_files(ctx, resolution)
+            create_file_jobs_for_unprocessed_files(ctx, &preset_name)
                 .await
                 .expect("it should work flawless to create file jobs");
             let processed_files_count = Processor::new(ctx)
-                .process_pending_file_jobs(resolution)
+                .process_pending_file_jobs(&preset_name)
                 .await
                 .expect("it should work flawless to process files");
             if processed_files_count != 0 {
-                ticker.elapsed(format!("to process unprocessed files for {resolution} preset."))
+                ticker.elapsed(format!("to process unprocessed files for {preset_name} preset."))
             }
         }
         sleep(Duration::from_secs(
@@ -146,16 +146,27 @@ pub async fn run(ctx: &AppContext) -> Result<()> {
     }
 }
 
+fn get_preset_names(ctx: &AppContext) -> Vec<String> {
+    let mut presets = vec![];
+    if ctx.config.enable_preview_preset {
+        presets.push("preview".into());
+    }
+    if ctx.config.enable_thumbnail_preset {
+        presets.push("thumbnail".into());
+    }
+    presets
+}
+
 pub async fn create_file_jobs_for_unprocessed_files(
     ctx: &AppContext,
-    resolution: &str,
+    preset_name: &str,
 ) -> Result<()> {
     let mut offset = 0;
     let limit = 100;
     let mut count = 0;
     loop {
         let files =
-            db::get_unprocessed_files_for_a_given_job_name(&ctx.db, resolution, offset, limit)
+            db::get_unprocessed_files_for_a_given_job_name(&ctx.db, preset_name, offset, limit)
                 .await?;
         if files.is_empty() {
             break;
@@ -163,7 +174,7 @@ pub async fn create_file_jobs_for_unprocessed_files(
         debug!(
             "Found {} unprocessed files for {}:",
             files.len(),
-            resolution
+            preset_name
         );
 
         for x in files.iter() {
@@ -174,7 +185,7 @@ pub async fn create_file_jobs_for_unprocessed_files(
             .into_iter()
             .map(|f| FileJob {
                 file_full_path: f.file_full_path,
-                job_name: resolution.to_owned(),
+                job_name: preset_name.to_owned(),
                 created_at: time::now(),
                 finished_at: None,
                 command: None,
@@ -208,19 +219,19 @@ struct Processor<'a> {
 impl Processor<'_> {
     fn new(ctx: &AppContext) -> Processor {
         Processor {
-            image_converter: ImageConverterProcessor::new(),
-            video_converter: VideoConverterProcessor::new(),
+            image_converter: ImageConverterProcessor::new(ctx),
+            video_converter: VideoConverterProcessor::new(ctx),
             ctx,
         }
     }
-    pub async fn process_pending_file_jobs(&self, resolution: &str) -> Result<i32> {
+    pub async fn process_pending_file_jobs(&self, preset_name: &str) -> Result<i32> {
         let mut offset = 0;
         let limit = 100;
         let mut count = 0;
         loop {
             let files = db::get_unprocessed_files_for_a_given_job_name(
                 &self.ctx.db,
-                resolution,
+                preset_name,
                 offset,
                 limit,
             )
@@ -242,13 +253,13 @@ impl Processor<'_> {
                     command_log,
                     has_succeeded,
                 },
-            ) in self.process_files(files, resolution)
+            ) in self.process_files(files, preset_name)
             {
                 debug!("Marking file job for {} as completed", file.file_full_path);
                 db::mark_file_job_as_completed(
                     &self.ctx.db,
                     &file.file_full_path,
-                    resolution,
+                    preset_name,
                     Some(command),
                     Some(command_log),
                     Some(has_succeeded),
@@ -260,13 +271,13 @@ impl Processor<'_> {
 
             offset += limit;
         }
-        if count != 0{
+        if count != 0 {
             info!("Processed {count} files.");
         }
         Ok(count)
     }
 
-    fn process_files(&self, files: Vec<File>, resolution: &str) -> Vec<(File, ProcessingResult)> {
+    fn process_files(&self, files: Vec<File>, preset_name: &str) -> Vec<(File, ProcessingResult)> {
         enum ExifProcessing {
             Success((File, Exiftool)),
             Failure((File, ProcessingResult)),
@@ -301,7 +312,7 @@ impl Processor<'_> {
             .map(|(file, exif)| FileToBeProcessed {
                 root: &self.ctx.config.input_folder,
                 output_folder: &self.ctx.config.output_folder,
-                resolution,
+                preset_name: preset_name,
                 file,
                 exif,
             })
