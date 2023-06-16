@@ -22,7 +22,7 @@ To run the example without needing to install any dependencies besides Docker co
 
 ```bash
 cd examples/convert_heic_and_hevc
-docker compose build && docker compose up
+docker compose up
 ```
 
 The generated files will be on `examples/convert_heic_and_hevc/media-out`.
@@ -44,7 +44,7 @@ services:
       - POSTGRES_PASSWORD=fixmylib
 
   fixmylib:
-    image: ghcr.io/rodrigomideac/fixmylib:latest
+    image: rodrigomideac/fixmylib:latest
     group_add:
       - "109"
       - "989"
