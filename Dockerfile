@@ -31,7 +31,7 @@ RUN apt-get update &&  \
   # Install imagemagick with HEIF delegates
 RUN  t=$(mktemp) && \
         wget 'https://dist.1-2.dev/imei.sh' -qO "$t" && \
-        bash "$t" && \
+        bash "$t" --build-cflags "-mno-avx512f" --build-cxxflags "-mno-avx512f" && \
         rm "$t"
 RUN apt-get update &&  \
     apt-get install -y \
