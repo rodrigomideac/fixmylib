@@ -1,5 +1,5 @@
-use crate::time;
 use anyhow::{Context, Result};
+
 use sqlx::types::time::PrimitiveDateTime;
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
@@ -110,29 +110,52 @@ pub async fn upsert_file_job(db: &Pool<Postgres>, job: FileJob) -> Result<FileJo
     Ok(filescan_job)
 }
 
-pub async fn mark_file_job_as_completed(
-    db: &Pool<Postgres>,
-    file_full_path: &str,
-    job_name: &str,
-    command: Option<String>,
-    command_log: Option<String>,
-    has_succeeded: Option<bool>,
-) -> Result<()> {
-    sqlx::query!(
+pub async fn upsert_file_jobs(db: &Pool<Postgres>, file_jobs: Vec<FileJob>) -> Result<()> {
+    // Due to limitations in SQLX, we can't do native bulk inserts.
+    // Here we follow the advice from https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-bind-an-array-to-a-values-clause-how-can-i-do-bulk-inserts
+    let file_full_path_values: Vec<String> =
+        file_jobs.iter().map(|f| f.file_full_path.clone()).collect();
+    let job_name_values: Vec<String> = file_jobs.iter().map(|f| f.job_name.clone()).collect();
+    let created_at_values: Vec<PrimitiveDateTime> =
+        file_jobs.iter().map(|f| f.created_at).collect();
+    let finished_at_values: Vec<Option<PrimitiveDateTime>> =
+        file_jobs.iter().map(|f| f.finished_at).collect();
+    let command_values: Vec<Option<String>> = file_jobs.iter().map(|f| f.command.clone()).collect();
+    let command_log_values: Vec<Option<String>> =
+        file_jobs.iter().map(|f| f.command_log.clone()).collect();
+    let has_succeeded_values: Vec<Option<bool>> =
+        file_jobs.iter().map(|f| f.has_succeeded).collect();
+
+    sqlx
+    ::query!(
         r#"
-        update file_jobs set finished_at = $1, command = $2, command_log = $3, has_succeeded = $4
-        where file_full_path = $5 and job_name = $6
+        INSERT INTO file_jobs (file_full_path, job_name, created_at, finished_at, command, command_log, has_succeeded)
+        SELECT
+          t.file_full_path::TEXT,
+          t.job_name::TEXT,
+          t.created_at::TIMESTAMP,
+          t.finished_at::TIMESTAMP,
+          t.command::TEXT,
+          t.command_log::TEXT,
+          t.has_succeeded::BOOL
+        FROM UNNEST($1::TEXT[], $2::TEXT[], $3::TIMESTAMP[], $4::TIMESTAMP[], $5::TEXT[], $6::TEXT[], $7::BOOL[]) AS t (file_full_path, job_name, created_at, finished_at, command, command_log, has_succeeded)
+        ON CONFLICT (file_full_path, job_name) DO UPDATE
+        SET
+          finished_at = EXCLUDED.finished_at,
+          command = EXCLUDED.command,
+          command_log = EXCLUDED.command_log,
+          has_succeeded = EXCLUDED.has_succeeded;
         "#,
-        time::now(),
-        command,
-        command_log,
-        has_succeeded,
-        file_full_path,
-        job_name
+        &file_full_path_values[..],
+        &job_name_values[..],
+        &created_at_values[..],
+        &finished_at_values[..]: Vec<Option<PrimitiveDateTime>>,
+        &command_values[..]: Vec<Option<String>>,
+        &command_log_values[..]: Vec<Option<String>> ,
+        &has_succeeded_values[..]: Vec<Option<bool>>,
     )
-    .execute(db)
-    .await
-    .context("could not mark file job as completed")?;
+        .execute(db)
+        .await?;
     Ok(())
 }
 
@@ -288,4 +311,44 @@ pub async fn get_unprocessed_files_for_a_given_job_name(
         .await
         .context("could not fetch files")?;
     Ok(files)
+}
+
+pub async fn get_unprocessed_file_jobs_for_a_given_job_name_and_files(
+    db: &Pool<Postgres>,
+    preset_name: &str,
+    files: &[File],
+) -> Result<Vec<FileJob>> {
+    let file_full_paths = files
+        .iter()
+        .map(|f| f.file_full_path.clone())
+        .collect::<Vec<String>>();
+    let job_names = files
+        .iter()
+        .map(|_| preset_name.to_owned())
+        .collect::<Vec<String>>();
+
+    let file_jobs = sqlx::query_as!(
+        FileJob,
+        r#"SELECT * from file_jobs where (file_full_path, job_name) IN (
+            SELECT unnest($1::text[]), unnest($2::text[])
+        )"#,
+        &file_full_paths[..],
+        &job_names[..]
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(file_jobs)
+}
+
+pub async fn get_unprocessed_file_and_jobs(
+    db: &Pool<Postgres>,
+    preset_name: &str,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<(File, FileJob)>> {
+    let files = get_unprocessed_files_for_a_given_job_name(db, preset_name, offset, limit).await?;
+    let file_jobs =
+        get_unprocessed_file_jobs_for_a_given_job_name_and_files(db, preset_name, &files).await?;
+
+    Ok(files.into_iter().zip(file_jobs.into_iter()).collect())
 }

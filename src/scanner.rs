@@ -19,7 +19,10 @@ pub async fn run(ctx: &AppContext) -> anyhow::Result<()> {
     loop {
         let mut unfinished_scan_jobs = get_unfinished_filescan_jobs(&ctx.db).await?;
         if unfinished_scan_jobs.is_empty() {
-            info!("Starting new full scan for files on {}", ctx.config.input_folder.clone());
+            info!(
+                "Starting new full scan for files on {}",
+                ctx.config.input_folder.clone()
+            );
             let job = FilescanJob {
                 id: Uuid::new_v4(),
                 full_path: ctx.config.input_folder.clone(),
@@ -39,7 +42,7 @@ pub async fn run(ctx: &AppContext) -> anyhow::Result<()> {
                     ..job
                 },
             )
-                .await?;
+            .await?;
         }
         debug!("Done scanning all filescanjobs");
         sleep(Duration::from_secs(ctx.config.seconds_between_file_scans)).await;

@@ -1,8 +1,8 @@
 use crate::processor::{CommandRunner, FileToBeProcessed, ProcessingResult};
+use crate::AppContext;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
 use rayon::ThreadPool;
-use crate::AppContext;
 
 pub struct ImageConverterProcessor {
     pool: ThreadPool,

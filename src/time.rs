@@ -1,5 +1,5 @@
-use std::fmt::Display;
 use sqlx::types::time::{OffsetDateTime, PrimitiveDateTime};
+use std::fmt::Display;
 
 pub fn now() -> PrimitiveDateTime {
     let now = OffsetDateTime::now_utc();
