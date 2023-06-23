@@ -4,6 +4,8 @@ use crate::{db, AppContext};
 use anyhow::Result;
 
 use std::time::Duration;
+use clap::command;
+use sqlx::types::time::PrimitiveDateTime;
 
 use crate::exiftool::{exiftool_on_file, Exiftool};
 use crate::image_converter::ImageConverterProcessor;
@@ -12,11 +14,65 @@ use crate::video_converter::VideoConverterProcessor;
 use subprocess::{Exec, ExitStatus, Redirection};
 use tokio::time::sleep;
 
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, PartialEq, Clone)]
+pub struct VideoMetrics {
+    pub fps: u32,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ProcessingMetrics {
+    Video(VideoMetrics),
+    Image,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProcessingResult {
     pub command: String,
     pub command_log: String,
     pub has_succeeded: bool,
+    processing_started_at: PrimitiveDateTime,
+    processing_finished_at: PrimitiveDateTime,
+    metrics: Option<ProcessingMetrics>,
+}
+
+impl ProcessingResult {
+    pub fn new() -> ProcessingResult {
+        ProcessingResult {
+            command: "".to_string(),
+            command_log: "".to_string(),
+            has_succeeded: false,
+            processing_started_at: now(),
+            processing_finished_at: now(),
+            metrics: None,
+        }
+    }
+
+    pub fn with_command_log(mut self, command_log: String) -> ProcessingResult {
+        self.command_log = command_log;
+        self
+    }
+
+    pub fn with_command(mut self, command: String) -> ProcessingResult {
+        self.command = command;
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: ProcessingMetrics) -> ProcessingResult {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    pub fn succeeded(mut self) -> ProcessingResult {
+        self.has_succeeded = true;
+        self.processing_finished_at = now();
+        self
+    }
+
+    pub fn failed(mut self) -> ProcessingResult {
+        self.has_succeeded = false;
+        self.processing_finished_at = now();
+        self
+    }
 }
 
 pub struct CommandRunner {
@@ -30,8 +86,8 @@ impl CommandRunner {
             cwd: cwd.into(),
             cmd: "".to_string(),
         }
-        .with(r#"#!/bin/sh"#)
-        .with(r#"set -e"#)
+            .with(r#"#!/bin/sh"#)
+            .with(r#"set -e"#)
     }
 
     pub fn with(mut self, partial_cmd: impl AsRef<str>) -> CommandRunner {
@@ -41,33 +97,23 @@ impl CommandRunner {
 
     pub fn run(&self) -> ProcessingResult {
         debug!("Will run command: {}", &self.cmd);
+        let result = ProcessingResult::new();
         let capture_data_result = Exec::shell(&self.cmd)
             .cwd(&self.cwd)
             .stdout(Redirection::Pipe)
             .stderr(Redirection::Merge)
             .capture();
         if let Err(e) = capture_data_result {
-            return ProcessingResult {
-                command: self.cmd.clone(),
-                command_log: e.to_string(),
-                has_succeeded: false,
-            };
+            return result.with_command(self.cmd.clone()).with_command_log(e.to_string()).failed();
         }
         let capture_date = capture_data_result.unwrap();
         let stdout = capture_date.stdout_str();
         debug!("Result stdout: {stdout}");
         let exit_status = capture_date.exit_status;
         match exit_status {
-            ExitStatus::Exited(code) if code == 0 => ProcessingResult {
-                command: "".to_owned(),
-                command_log: stdout,
-                has_succeeded: true,
-            },
-            _ => ProcessingResult {
-                command: self.cmd.clone(),
-                command_log: stdout,
-                has_succeeded: false,
-            },
+            ExitStatus::Exited(code) if code == 0 =>
+                result.with_command_log(stdout).succeeded(),
+            _ => result.with_command(self.cmd.clone()).with_command_log(stdout).failed(),
         }
     }
 }
@@ -145,7 +191,7 @@ pub async fn run(ctx: &AppContext) -> Result<()> {
         sleep(Duration::from_secs(
             ctx.config.seconds_between_processor_runs,
         ))
-        .await;
+            .await;
     }
 }
 
@@ -244,65 +290,42 @@ impl Processor<'_> {
                 debug!("{}", file.file_full_path)
             }
 
-            let updated_file_jobs = self
-                .process_files(files_and_jobs, preset_name)
+            let processed_data = self.process_files(files_and_jobs, preset_name);
+
+            print_statistics(&processed_data);
+
+            let updated_file_jobs = processed_data
                 .into_iter()
                 .map(
                     |(
-                        file,
-                        file_job,
-                        ProcessingResult {
-                            command,
-                            command_log,
-                            has_succeeded,
-                        },
-                    )| FileJob {
-                        file_full_path: file.file_full_path,
-                        job_name: preset_name.to_owned(),
-                        finished_at: Some(now()),
-                        command: Some(command),
-                        command_log: Some(command_log),
-                        has_succeeded: Some(has_succeeded),
-                        ..file_job
-                    },
+                         file,
+                         file_job,
+                         ProcessingResult {
+                             command,
+                             command_log,
+                             has_succeeded,
+                             ..
+                         },
+                     )| {
+                        FileJob {
+                            file_full_path: file.file_full_path,
+                            job_name: preset_name.to_owned(),
+                            finished_at: Some(now()),
+                            command: Some(command),
+                            command_log: Some(command_log),
+                            has_succeeded: Some(has_succeeded),
+                            ..file_job
+                        }
+                    }
                 )
                 .collect::<Vec<FileJob>>();
+
+
             let job_count: i32 = updated_file_jobs.len() as i32;
             let tick = Ticker::new();
             db::upsert_file_jobs(&self.ctx.db, updated_file_jobs).await?;
-            tick.elapsed("To insert a batch o filejobs");
+            tick.elapsed("To insert a batch of filejobs");
             count += job_count;
-
-            // for (
-            //     file,
-            //     ProcessingResult {
-            //         command,
-            //         command_log,
-            //         has_succeeded,
-            //     },
-            // ) in self.process_files(files, preset_name)
-            // {
-            //     let p = PartialFileJob {
-            //         file_full_path: &file.file_full_path,
-            //         job_name: preset_name,
-            //         finished_at: Some(now()),
-            //         command: Some(command),
-            //         command_log: Some(command_log),
-            //         has_succeeded: Some(has_succeeded),
-            //     };
-            //     debug!("Marking file job for {} as completed", file.file_full_path);
-            //     db::mark_file_job_as_completed(
-            //         &self.ctx.db,
-            //         &file.file_full_path,
-            //         preset_name,
-            //         Some(command),
-            //         Some(command_log),
-            //         Some(has_succeeded),
-            //     )
-            //         .await?;
-            //     debug!("Success marking {} as completed", &file.file_full_path);
-            //     count += 1;
-            // }
 
             offset += limit;
         }
@@ -329,11 +352,7 @@ impl Processor<'_> {
                 Err(e) => ExifProcessing::Failure((
                     file,
                     job,
-                    ProcessingResult {
-                        command: "".to_string(),
-                        command_log: format!("Failure extracting exif data: {:?}", e),
-                        has_succeeded: false,
-                    },
+                    ProcessingResult::new().with_command_log(format!("Failure extracting exif data: {:?}", e)).failed(),
                 )),
             })
             .collect();
@@ -393,14 +412,10 @@ impl Processor<'_> {
                 (
                     f.file,
                     f.file_job,
-                    ProcessingResult {
-                        command: "".to_string(),
-                        command_log: format!(
-                            "File is neither imager or video. Mime type: {}",
-                            f.exif.mime_type
-                        ),
-                        has_succeeded: true,
-                    },
+                    ProcessingResult::new().with_command_log(format!(
+                        "File is neither imager or video. Mime type: {}",
+                        f.exif.mime_type
+                    )).succeeded(),
                 )
             })
             .collect();
@@ -419,6 +434,21 @@ impl Processor<'_> {
             non_media_files_processed,
             failed_exifs_processed,
         ]
-        .concat()
+            .concat()
     }
+}
+
+fn print_statistics(data: &[(File, FileJob, ProcessingResult)]) {
+    let elements = data.iter()
+        .flat_map(|(_, _, ProcessingResult { metrics, .. })|
+            if let Some(ProcessingMetrics::Video(VideoMetrics { fps })) = metrics {
+                Some(*fps)
+            } else {
+                None
+            }
+        ).collect::<Vec<u32>>();
+
+    let sum: u32 = elements.iter().sum();
+    let mean = sum as f64 / elements.len() as f64;
+    info!("Mean transcoding FPS for video: {mean}")
 }

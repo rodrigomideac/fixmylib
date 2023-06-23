@@ -1,4 +1,4 @@
-use crate::processor::{CommandRunner, FileToBeProcessed, ProcessingResult};
+use crate::processor::{CommandRunner, FileToBeProcessed, ProcessingMetrics, ProcessingResult, VideoMetrics};
 use crate::AppContext;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
@@ -41,6 +41,11 @@ impl VideoConverter<'_> {
     }
 
     pub fn run(&self) -> ProcessingResult {
+        let result = self.run_using_hw_or_sw_transcoding();
+        self.add_metrics(result)
+    }
+
+    fn run_using_hw_or_sw_transcoding(&self) -> ProcessingResult {
         let hw_transcoding = self.run_hw_transcoding_intel();
         if hw_transcoding.has_succeeded {
             return hw_transcoding;
@@ -48,6 +53,62 @@ impl VideoConverter<'_> {
 
         info!("video conversion for {} has failed using hw transcoding, fallback to software transcoding...", self.file.file_full_path());
         self.run_software_transcoding()
+    }
+
+    fn add_metrics(&self, result: ProcessingResult) -> ProcessingResult {
+        if !result.has_succeeded {
+            return result;
+        }
+
+        let maybe_fps = self.parse_fps(&result.command_log);
+
+        if let Some(fps) = maybe_fps {
+            result.with_metrics(ProcessingMetrics::Video(VideoMetrics { fps }))
+        } else {
+            result
+        }
+    }
+
+    fn parse_fps(&self, command_log: &str) -> Option<u32> {
+        let mut statistics_line = "";
+        for line in command_log.lines() {
+            if line.starts_with("frame=") {
+                statistics_line = line;
+            }
+        }
+        let statistics_lines = statistics_line.split("\r").collect::<Vec<&str>>();
+        let mut fps_sum: u32 = 0;
+        let mut fps_elements_count: u32 = 0;
+        for line in statistics_lines {
+            let maybe_fps = self.parse_single_fps_line(line);
+            match maybe_fps {
+                Some(fps) if fps > 1 => {
+                    fps_sum += fps;
+                    fps_elements_count += 1;
+                }
+                _ => { continue; }
+            }
+        }
+
+        if fps_sum > 0 {
+            Some(fps_sum/fps_elements_count)
+        } else {
+            None
+        }
+    }
+
+    fn parse_single_fps_line(&self, line: &str) -> Option<u32> {
+        let maybe_fps_index = line.find("fps=");
+        let maybe_q_index = line.find(" q=");
+        if let (Some(fps_index), Some(q_index)) = (maybe_fps_index, maybe_q_index) {
+            line[fps_index..q_index]
+                .replace("fps=", "")
+                .parse::<u32>()
+                .map_err(|e| debug!("Failure extracting FPS from video conversion: {}",e))
+                .ok()
+        } else {
+            None
+        }
     }
 
     fn run_hw_transcoding_intel(&self) -> ProcessingResult {
