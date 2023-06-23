@@ -169,6 +169,63 @@
     },
     "query": "\n        select * from folders where folder_full_path = $1\n        "
   },
+  "767ca5ba748157320a475f0575680f81137b161c92102f42f4f4cfd8173b51db": {
+    "describe": {
+      "columns": [
+        {
+          "name": "file_full_path",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "job_name",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 2,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "finished_at",
+          "ordinal": 3,
+          "type_info": "Timestamp"
+        },
+        {
+          "name": "command",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "command_log",
+          "ordinal": 5,
+          "type_info": "Text"
+        },
+        {
+          "name": "has_succeeded",
+          "ordinal": 6,
+          "type_info": "Bool"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true
+      ],
+      "parameters": {
+        "Left": [
+          "TextArray",
+          "TextArray"
+        ]
+      }
+    },
+    "query": "SELECT * from file_jobs where (file_full_path, job_name) IN (\n            SELECT unnest($1::text[]), unnest($2::text[])\n        )"
+  },
   "9bb4904f519bf640072aea16d33fa967804e8acbca203e0c1baa0d47f5276e42": {
     "describe": {
       "columns": [
@@ -354,23 +411,6 @@
     },
     "query": "SELECT\n            files.file_full_path as \"file_full_path!\",\n            files.folder_full_path as \"folder_full_path!\",\n            files.path as \"path!\",\n            files.size as \"size!\",\n            files.stem as \"stem!\",\n            files.extension as \"extension!\",\n            files.name as \"name!\",\n            files.has_been_processed as \"has_been_processed!\",\n            files.created_at as \"created_at!\",\n            files.updated_at as \"updated_at!\",\n            files.file_modified_at as \"file_modified_at!\",\n            files.job_id as \"job_id!\"\n             from files\n             LEFT JOIN file_jobs ON files.file_full_path = file_jobs.file_full_path AND file_jobs.job_name = $1\n             WHERE file_jobs.finished_at IS NULL\n             ORDER BY files.folder_full_path\n             OFFSET $2 ROWS\n             FETCH NEXT $3 ROWS ONLY\n             "
   },
-  "c470641f7fa58740df9a83d28a5cf29c6f59deb5f3c5d3acc67d7d77514ba05c": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Timestamp",
-          "Text",
-          "Text",
-          "Bool",
-          "Text",
-          "Text"
-        ]
-      }
-    },
-    "query": "\n        update file_jobs set finished_at = $1, command = $2, command_log = $3, has_succeeded = $4\n        where file_full_path = $5 and job_name = $6\n        "
-  },
   "cf859bbe166c900694b84f88a0892644d26df8ceac50e0b3fbce8996256d38a2": {
     "describe": {
       "columns": [
@@ -429,6 +469,24 @@
       }
     },
     "query": "\n        with file_job_upsert as (\n        insert into file_jobs (file_full_path, job_name, created_at, finished_at) values ($1, $2, $3, $4)\n        on conflict(file_full_path, job_name) do update set\n            created_at = excluded.created_at,\n            finished_at = excluded.finished_at\n            returning *\n        )\n        select * from file_job_upsert where file_full_path = $1 and job_name = $2\n        "
+  },
+  "d39f589436ef9d74f2706d17c575c4fb8fd6b27fc44ddada57ce71e2381e2f18": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "TextArray",
+          "TextArray",
+          "TimestampArray",
+          "TimestampArray",
+          "TextArray",
+          "TextArray",
+          "BoolArray"
+        ]
+      }
+    },
+    "query": "\n        INSERT INTO file_jobs (file_full_path, job_name, created_at, finished_at, command, command_log, has_succeeded)\n        SELECT\n          t.file_full_path::TEXT,\n          t.job_name::TEXT,\n          t.created_at::TIMESTAMP,\n          t.finished_at::TIMESTAMP,\n          t.command::TEXT,\n          t.command_log::TEXT,\n          t.has_succeeded::BOOL\n        FROM UNNEST($1::TEXT[], $2::TEXT[], $3::TIMESTAMP[], $4::TIMESTAMP[], $5::TEXT[], $6::TEXT[], $7::BOOL[]) AS t (file_full_path, job_name, created_at, finished_at, command, command_log, has_succeeded)\n        ON CONFLICT (file_full_path, job_name) DO UPDATE\n        SET\n          finished_at = EXCLUDED.finished_at,\n          command = EXCLUDED.command,\n          command_log = EXCLUDED.command_log,\n          has_succeeded = EXCLUDED.has_succeeded;\n        "
   },
   "e244b83a27ea98e90dafe9a11a7326cef66d825b0fd0ca46e26758765f9ac578": {
     "describe": {
