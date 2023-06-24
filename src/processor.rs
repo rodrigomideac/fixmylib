@@ -1,10 +1,12 @@
+use std::fmt::format;
 use crate::db::{File, FileJob};
 
 use crate::{db, AppContext};
 use anyhow::Result;
 
 use std::time::Duration;
-use clap::command;
+use csv::Writer;
+
 use sqlx::types::time::PrimitiveDateTime;
 
 use crate::exiftool::{exiftool_on_file, Exiftool};
@@ -22,7 +24,6 @@ pub struct VideoMetrics {
 #[derive(Debug, PartialEq, Clone)]
 pub enum ProcessingMetrics {
     Video(VideoMetrics),
-    Image,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -96,7 +97,7 @@ impl CommandRunner {
     }
 
     pub fn run(&self) -> ProcessingResult {
-        debug!("Will run command: {}", &self.cmd);
+        trace!("Will run command: {}", &self.cmd);
         let result = ProcessingResult::new();
         let capture_data_result = Exec::shell(&self.cmd)
             .cwd(&self.cwd)
@@ -108,7 +109,7 @@ impl CommandRunner {
         }
         let capture_date = capture_data_result.unwrap();
         let stdout = capture_date.stdout_str();
-        debug!("Result stdout: {stdout}");
+        trace!("Result stdout: {stdout}");
         let exit_status = capture_date.exit_status;
         match exit_status {
             ExitStatus::Exited(code) if code == 0 =>
@@ -188,6 +189,9 @@ pub async fn run(ctx: &AppContext) -> Result<()> {
                 ))
             }
         }
+
+        debug!("Going to save reports...");
+        save_failed_jobs_report(ctx).await?;
         sleep(Duration::from_secs(
             ctx.config.seconds_between_processor_runs,
         ))
@@ -451,4 +455,34 @@ fn print_statistics(data: &[(File, FileJob, ProcessingResult)]) {
     let sum: u32 = elements.iter().sum();
     let mean = sum as f64 / elements.len() as f64;
     info!("Mean transcoding FPS for video: {mean}")
+}
+
+async fn save_failed_jobs_report(ctx: &AppContext) -> Result<()> {
+    let failed_file_jobs = db::get_failed_file_jobs(&ctx.db).await?;
+    if failed_file_jobs.is_empty() {
+        debug!("Not generating report because no failed conversion job found");
+        return Ok(());
+    }
+    let failed_count = failed_file_jobs.len();
+    let report_path = format!("{}/processing_errors.csv", ctx.config.logs_folder);
+
+    let mut writer = Writer::from_path(&report_path)?;
+    writer.write_record([
+        "file_full_path",
+        "preset_name",
+        "command",
+        "command_log",
+    ])?;
+
+    for job in failed_file_jobs {
+        writer.write_record(&[
+            job.file_full_path,
+            job.job_name,
+            job.command.unwrap_or_default().replace('\n',"\\n"),
+            job.command_log.unwrap_or_default().replace('\n',"\\n"),
+        ])?;
+    }
+    writer.flush()?;
+    info!("Saved report at {report_path} for {} failed conversions.",failed_count);
+    Ok(())
 }

@@ -12,6 +12,9 @@ pub struct Config {
     #[arg(short, long, env)]
     pub output_folder: String,
 
+    #[arg(long, env)]
+    pub logs_folder: String,
+
     #[arg(short, long, env)]
     pub scanner_threads: usize,
 

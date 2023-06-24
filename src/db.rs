@@ -55,9 +55,8 @@ pub async fn get_unfinished_filescan_jobs(db: &Pool<Postgres>) -> Result<Vec<Fil
         select * from filescan_jobs where finished_at is null
         "#
     )
-    .fetch_all(db)
-    .await
-    .context("could not get  folder")?;
+        .fetch_all(db)
+        .await?;
     Ok(filescans)
 }
 
@@ -80,9 +79,8 @@ pub async fn upsert_filescan_job(db: &Pool<Postgres>, job: FilescanJob) -> Resul
         job.created_at,
         job.finished_at
     )
-    .fetch_one(db)
-    .await
-    .context("could not upsert filescan job")?;
+        .fetch_one(db)
+        .await?;
     Ok(filescan_job)
 }
 
@@ -105,8 +103,7 @@ pub async fn upsert_file_job(db: &Pool<Postgres>, job: FileJob) -> Result<FileJo
         job.finished_at
     )
         .fetch_one(db)
-        .await
-        .context("could not upsert file job")?;
+        .await?;
     Ok(filescan_job)
 }
 
@@ -167,9 +164,8 @@ pub async fn get_folder(db: &Pool<Postgres>, full_path: String) -> Result<Option
         "#,
         full_path
     )
-    .fetch_optional(db)
-    .await
-    .context("could not get folder")?;
+        .fetch_optional(db)
+        .await?;
     Ok(folder)
 }
 
@@ -180,9 +176,8 @@ pub async fn get_folders(db: &Pool<Postgres>) -> Result<Vec<Folder>> {
         select * from folders;
         "#
     )
-    .fetch_all(db)
-    .await
-    .context("could not get  folder")?;
+        .fetch_all(db)
+        .await?;
     Ok(folders)
 }
 
@@ -215,9 +210,8 @@ pub async fn upsert_folder(db: &Pool<Postgres>, folder: Folder) -> Result<Folder
         folder.parent_folder_full_path,
         folder.job_id
     )
-    .fetch_one(db)
-    .await
-    .context("Failed to insert in db")?;
+        .fetch_one(db)
+        .await?;
     Ok(folder)
 }
 
@@ -269,9 +263,8 @@ pub async fn upsert_file(db: &Pool<Postgres>, file: File) -> Result<File> {
         file.file_modified_at,
         file.job_id
     )
-    .fetch_one(db)
-    .await
-    .context("could not insert file")?;
+        .fetch_one(db)
+        .await?;
     Ok(file)
 }
 
@@ -308,8 +301,7 @@ pub async fn get_unprocessed_files_for_a_given_job_name(
         limit
     )
         .fetch_all(db)
-        .await
-        .context("could not fetch files")?;
+        .await?;
     Ok(files)
 }
 
@@ -335,8 +327,8 @@ pub async fn get_unprocessed_file_jobs_for_a_given_job_name_and_files(
         &file_full_paths[..],
         &job_names[..]
     )
-    .fetch_all(db)
-    .await?;
+        .fetch_all(db)
+        .await?;
     Ok(file_jobs)
 }
 
@@ -351,4 +343,18 @@ pub async fn get_unprocessed_file_and_jobs(
         get_unprocessed_file_jobs_for_a_given_job_name_and_files(db, preset_name, &files).await?;
 
     Ok(files.into_iter().zip(file_jobs.into_iter()).collect())
+}
+
+
+pub async fn get_failed_file_jobs(
+    db: &Pool<Postgres>
+) -> Result<Vec<FileJob>> {
+    let file_jobs = sqlx::query_as!(
+        FileJob,
+        r#"SELECT * from file_jobs where has_succeeded = false
+        "#,
+    )
+        .fetch_all(db)
+        .await?;
+    Ok(file_jobs)
 }
