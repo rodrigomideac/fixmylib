@@ -17,7 +17,7 @@ pub struct File {
     pub created_at: PrimitiveDateTime,
     pub updated_at: PrimitiveDateTime,
     pub file_modified_at: PrimitiveDateTime,
-    pub job_id: Uuid,
+    pub filescan_job_id: Uuid,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -26,7 +26,7 @@ pub struct Folder {
     pub path: String,
     pub name: String,
     pub parent_folder_full_path: String,
-    pub job_id: Uuid,
+    pub filescan_job_id: Uuid,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -192,14 +192,14 @@ pub async fn upsert_folder(db: &Pool<Postgres>, folder: Folder) -> Result<Folder
                   path,
                   name,
                   parent_folder_full_path,
-                  job_id
+                  filescan_job_id
                 )
               values
                 ($1, $2, $3, $4, $5) on conflict (folder_full_path) DO UPDATE SET
             "path" = excluded."path",
             "name" = excluded."name",
             parent_folder_full_path = excluded.parent_folder_full_path,
-            job_id = excluded.job_id
+            filescan_job_id = excluded.filescan_job_id
             returning *
         )
         select * from folder_upsert where folder_full_path = $1
@@ -208,7 +208,7 @@ pub async fn upsert_folder(db: &Pool<Postgres>, folder: Folder) -> Result<Folder
         folder.path,
         folder.name,
         folder.parent_folder_full_path,
-        folder.job_id
+        folder.filescan_job_id
     )
         .fetch_one(db)
         .await?;
@@ -232,7 +232,7 @@ pub async fn upsert_file(db: &Pool<Postgres>, file: File) -> Result<File> {
             created_at,
             updated_at,
             file_modified_at,
-            job_id
+            filescan_job_id
             ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             on conflict (file_full_path) DO UPDATE SET
                 file_full_path = excluded.file_full_path,
@@ -246,7 +246,7 @@ pub async fn upsert_file(db: &Pool<Postgres>, file: File) -> Result<File> {
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at,
                 file_modified_at = excluded.file_modified_at,
-                job_id = excluded.job_id
+                filescan_job_id = excluded.filescan_job_id
             returning *
         ) select * from file_insert where file_full_path = $1
         "#,
@@ -261,7 +261,7 @@ pub async fn upsert_file(db: &Pool<Postgres>, file: File) -> Result<File> {
         file.created_at,
         file.updated_at,
         file.file_modified_at,
-        file.job_id
+        file.filescan_job_id
     )
         .fetch_one(db)
         .await?;
@@ -288,7 +288,7 @@ pub async fn get_unprocessed_files_for_a_given_preset_name(
             files.created_at as "created_at!",
             files.updated_at as "updated_at!",
             files.file_modified_at as "file_modified_at!",
-            files.job_id as "job_id!"
+            files.filescan_job_id as "filescan_job_id!"
              from files
              LEFT JOIN file_jobs ON files.file_full_path = file_jobs.file_full_path AND file_jobs.preset_name = $1
              WHERE file_jobs.finished_at IS NULL

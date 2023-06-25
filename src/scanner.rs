@@ -118,11 +118,11 @@ async fn run_job_for_folders(ctx: &AppContext, job: &FilescanJob) -> Result<()> 
 async fn process_folder_entry(
     ctx: AppContext,
     entry: EntryProperties<'_>,
-    job_id: Uuid,
+    filescan_job_id: Uuid,
 ) -> Result<()> {
     let updated_folder = if let Some(folder) = get_folder(&ctx.db, entry.full_path()?).await? {
         debug!("Folder {} already exists on DB", entry.full_path()?);
-        Folder { job_id, ..folder }
+        Folder { filescan_job_id, ..folder }
     } else {
         debug!("Folder {} do not exists on DB", entry.full_path()?);
         let parent_folder_full_path = if entry.full_path()?.as_str() == entry.root {
@@ -139,7 +139,7 @@ async fn process_folder_entry(
             path: entry.path()?,
             name: entry.filename()?,
             parent_folder_full_path,
-            job_id,
+            filescan_job_id,
         }
     };
     upsert_folder(&ctx.db, updated_folder).await?;
@@ -229,7 +229,7 @@ impl EntryProperties<'_> {
             .to_lowercase())
     }
 
-    fn to_file(&self, job_id: Uuid) -> Result<File> {
+    fn to_file(&self, filescan_job_id: Uuid) -> Result<File> {
         Ok(File {
             file_full_path: self.full_path()?,
             folder_full_path: self.parent_folder_full_path()?,
@@ -242,7 +242,7 @@ impl EntryProperties<'_> {
             created_at: time::now(),
             updated_at: time::now(),
             file_modified_at: self.modified_date()?,
-            job_id,
+            filescan_job_id,
         })
     }
 }

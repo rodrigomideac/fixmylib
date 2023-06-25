@@ -149,54 +149,6 @@
     },
     "query": "\n        select * from filescan_jobs where finished_at is null\n        "
   },
-  "37b209db2a66a25535b2aa819dbe83930293146f0faddbe00adbea7c54c66659": {
-    "describe": {
-      "columns": [
-        {
-          "name": "folder_full_path",
-          "ordinal": 0,
-          "type_info": "Text"
-        },
-        {
-          "name": "path",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "name",
-          "ordinal": 2,
-          "type_info": "Text"
-        },
-        {
-          "name": "parent_folder_full_path",
-          "ordinal": 3,
-          "type_info": "Text"
-        },
-        {
-          "name": "job_id",
-          "ordinal": 4,
-          "type_info": "Uuid"
-        }
-      ],
-      "nullable": [
-        false,
-        false,
-        false,
-        false,
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Text",
-          "Text",
-          "Text",
-          "Text",
-          "Uuid"
-        ]
-      }
-    },
-    "query": "\n        with folder_upsert as (\n        insert into\n                \"folders\" (\n                  folder_full_path,\n                  path,\n                  name,\n                  parent_folder_full_path,\n                  job_id\n                )\n              values\n                ($1, $2, $3, $4, $5) on conflict (folder_full_path) DO UPDATE SET\n            \"path\" = excluded.\"path\",\n            \"name\" = excluded.\"name\",\n            parent_folder_full_path = excluded.parent_folder_full_path,\n            job_id = excluded.job_id\n            returning *\n        )\n        select * from folder_upsert where folder_full_path = $1\n    "
-  },
   "3d836c2f72238715562278174e027aac4f3b79f2219131d51d5180d340e248fe": {
     "describe": {
       "columns": [
@@ -221,7 +173,7 @@
           "type_info": "Text"
         },
         {
-          "name": "job_id",
+          "name": "filescan_job_id",
           "ordinal": 4,
           "type_info": "Uuid"
         }
@@ -298,7 +250,55 @@
     },
     "query": "SELECT * from file_jobs where (file_full_path, preset_name) IN (\n            SELECT unnest($1::text[]), unnest($2::text[])\n        )"
   },
-  "98d3499cf11c1e4928721b48dd4b85ac8e986ec5a1a55430b7e77f4de52db382": {
+  "608cf408d5cf6e235e5bd0d7710c11afcbb6056f2d044dca7ca4dbfda86017a1": {
+    "describe": {
+      "columns": [
+        {
+          "name": "folder_full_path",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "path",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "parent_folder_full_path",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "filescan_job_id",
+          "ordinal": 4,
+          "type_info": "Uuid"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n        with folder_upsert as (\n        insert into\n                \"folders\" (\n                  folder_full_path,\n                  path,\n                  name,\n                  parent_folder_full_path,\n                  filescan_job_id\n                )\n              values\n                ($1, $2, $3, $4, $5) on conflict (folder_full_path) DO UPDATE SET\n            \"path\" = excluded.\"path\",\n            \"name\" = excluded.\"name\",\n            parent_folder_full_path = excluded.parent_folder_full_path,\n            filescan_job_id = excluded.filescan_job_id\n            returning *\n        )\n        select * from folder_upsert where folder_full_path = $1\n    "
+  },
+  "9c18f9327ffc9c6790640b99d454c754bdeaadaab94baa657d14551dab63ca2b": {
     "describe": {
       "columns": [
         {
@@ -357,7 +357,7 @@
           "type_info": "Timestamp"
         },
         {
-          "name": "job_id!",
+          "name": "filescan_job_id!",
           "ordinal": 11,
           "type_info": "Uuid"
         }
@@ -384,9 +384,9 @@
         ]
       }
     },
-    "query": "SELECT\n            files.file_full_path as \"file_full_path!\",\n            files.folder_full_path as \"folder_full_path!\",\n            files.path as \"path!\",\n            files.size as \"size!\",\n            files.stem as \"stem!\",\n            files.extension as \"extension!\",\n            files.name as \"name!\",\n            files.has_been_processed as \"has_been_processed!\",\n            files.created_at as \"created_at!\",\n            files.updated_at as \"updated_at!\",\n            files.file_modified_at as \"file_modified_at!\",\n            files.job_id as \"job_id!\"\n             from files\n             LEFT JOIN file_jobs ON files.file_full_path = file_jobs.file_full_path AND file_jobs.preset_name = $1\n             WHERE file_jobs.finished_at IS NULL\n             ORDER BY files.folder_full_path\n             OFFSET $2 ROWS\n             FETCH NEXT $3 ROWS ONLY\n             "
+    "query": "SELECT\n            files.file_full_path as \"file_full_path!\",\n            files.folder_full_path as \"folder_full_path!\",\n            files.path as \"path!\",\n            files.size as \"size!\",\n            files.stem as \"stem!\",\n            files.extension as \"extension!\",\n            files.name as \"name!\",\n            files.has_been_processed as \"has_been_processed!\",\n            files.created_at as \"created_at!\",\n            files.updated_at as \"updated_at!\",\n            files.file_modified_at as \"file_modified_at!\",\n            files.filescan_job_id as \"filescan_job_id!\"\n             from files\n             LEFT JOIN file_jobs ON files.file_full_path = file_jobs.file_full_path AND file_jobs.preset_name = $1\n             WHERE file_jobs.finished_at IS NULL\n             ORDER BY files.folder_full_path\n             OFFSET $2 ROWS\n             FETCH NEXT $3 ROWS ONLY\n             "
   },
-  "9bb4904f519bf640072aea16d33fa967804e8acbca203e0c1baa0d47f5276e42": {
+  "e0bbaa8229aad6d7289cb61005468cba30009eaeb49850de1e9654b7ff7c4f11": {
     "describe": {
       "columns": [
         {
@@ -445,7 +445,7 @@
           "type_info": "Timestamp"
         },
         {
-          "name": "job_id",
+          "name": "filescan_job_id",
           "ordinal": 11,
           "type_info": "Uuid"
         }
@@ -481,7 +481,7 @@
         ]
       }
     },
-    "query": "\n        with file_insert as (\n            insert into \"files\" (\n            file_full_path,\n            folder_full_path,\n            path,\n            size,\n            stem,\n            extension,\n            name,\n            has_been_processed,\n            created_at,\n            updated_at,\n            file_modified_at,\n            job_id\n            ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            on conflict (file_full_path) DO UPDATE SET\n                file_full_path = excluded.file_full_path,\n                folder_full_path = excluded.folder_full_path,\n                path = excluded.path,\n                size = excluded.size,\n                stem = excluded.stem,\n                extension = excluded.extension,\n                name = excluded.name,\n                has_been_processed = excluded.has_been_processed,\n                created_at = excluded.created_at,\n                updated_at = excluded.updated_at,\n                file_modified_at = excluded.file_modified_at,\n                job_id = excluded.job_id\n            returning *\n        ) select * from file_insert where file_full_path = $1\n        "
+    "query": "\n        with file_insert as (\n            insert into \"files\" (\n            file_full_path,\n            folder_full_path,\n            path,\n            size,\n            stem,\n            extension,\n            name,\n            has_been_processed,\n            created_at,\n            updated_at,\n            file_modified_at,\n            filescan_job_id\n            ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            on conflict (file_full_path) DO UPDATE SET\n                file_full_path = excluded.file_full_path,\n                folder_full_path = excluded.folder_full_path,\n                path = excluded.path,\n                size = excluded.size,\n                stem = excluded.stem,\n                extension = excluded.extension,\n                name = excluded.name,\n                has_been_processed = excluded.has_been_processed,\n                created_at = excluded.created_at,\n                updated_at = excluded.updated_at,\n                file_modified_at = excluded.file_modified_at,\n                filescan_job_id = excluded.filescan_job_id\n            returning *\n        ) select * from file_insert where file_full_path = $1\n        "
   },
   "e244b83a27ea98e90dafe9a11a7326cef66d825b0fd0ca46e26758765f9ac578": {
     "describe": {
@@ -507,7 +507,7 @@
           "type_info": "Text"
         },
         {
-          "name": "job_id",
+          "name": "filescan_job_id",
           "ordinal": 4,
           "type_info": "Uuid"
         }

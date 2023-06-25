@@ -14,13 +14,13 @@ create table if not exists folders
     "path" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     parent_folder_full_path TEXT NOT NULL,
-    job_id UUID NOT NULL,
+    filescan_job_id UUID NOT NULL,
     CONSTRAINT fk_parent_folder_full_path FOREIGN KEY (parent_folder_full_path) REFERENCES folders(folder_full_path),
-    CONSTRAINT fk_job_id FOREIGN KEY (job_id) REFERENCES filescan_jobs(id)
+    CONSTRAINT fk_filescan_job_id FOREIGN KEY (filescan_job_id) REFERENCES filescan_jobs(id)
 
 );
 CREATE INDEX idx_folders_fk_parent_folder_full_path ON folders (parent_folder_full_path);
-CREATE INDEX idx_folders_fk_job_id ON folders(job_id);
+CREATE INDEX idx_folders_fk_filescan_job_id ON folders(filescan_job_id);
 
 create table if not exists files
 (
@@ -35,13 +35,13 @@ create table if not exists files
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     file_modified_at TIMESTAMP NOT NULL,
-    job_id UUID NOT NULL,
+    filescan_job_id UUID NOT NULL,
     CONSTRAINT fk_folder_full_path FOREIGN KEY (folder_full_path) REFERENCES folders(folder_full_path),
-    CONSTRAINT fk_job_id FOREIGN KEY (job_id) REFERENCES filescan_jobs(id)
+    CONSTRAINT fk_filescan_job_id FOREIGN KEY (filescan_job_id) REFERENCES filescan_jobs(id)
 
 );
 CREATE INDEX idx_files_fk_folder_full_path ON files (folder_full_path);
-CREATE INDEX idx_files_fk_job_id ON files(job_id);
+CREATE INDEX idx_files_fk_filescan_job_id ON files(filescan_job_id);
 
 create table if not exists file_jobs
 (
