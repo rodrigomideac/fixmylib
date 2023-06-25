@@ -58,6 +58,7 @@ ENV DATABASE_URL="postgresql://postgres:fixmylib@localhost/postgres"
 ENV RUST_LOG="fixmylib=info,sqlx=warn"
 ENV INPUT_FOLDER=/media-in
 ENV OUTPUT_FOLDER=/media-out
+ENV LOGS_FOLDER=/media-out
 ENV SCANNER_THREADS=4
 ENV IMAGE_CONVERTER_THREADS=4
 ENV VIDEO_CONVERTER_THREADS=2
