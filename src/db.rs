@@ -40,7 +40,7 @@ pub struct FilescanJob {
 #[derive(Debug, PartialEq, Clone)]
 pub struct FileJob {
     pub file_full_path: String,
-    pub job_name: String,
+    pub preset_name: String,
     pub created_at: PrimitiveDateTime,
     pub finished_at: Option<PrimitiveDateTime>,
     pub command: Option<String>,
@@ -89,16 +89,16 @@ pub async fn upsert_file_job(db: &Pool<Postgres>, job: FileJob) -> Result<FileJo
         FileJob,
         r#"
         with file_job_upsert as (
-        insert into file_jobs (file_full_path, job_name, created_at, finished_at) values ($1, $2, $3, $4)
-        on conflict(file_full_path, job_name) do update set
+        insert into file_jobs (file_full_path, preset_name, created_at, finished_at) values ($1, $2, $3, $4)
+        on conflict(file_full_path, preset_name) do update set
             created_at = excluded.created_at,
             finished_at = excluded.finished_at
             returning *
         )
-        select * from file_job_upsert where file_full_path = $1 and job_name = $2
+        select * from file_job_upsert where file_full_path = $1 and preset_name = $2
         "#,
         job.file_full_path,
-        job.job_name,
+        job.preset_name,
         job.created_at,
         job.finished_at
     )
@@ -112,7 +112,7 @@ pub async fn upsert_file_jobs(db: &Pool<Postgres>, file_jobs: Vec<FileJob>) -> R
     // Here we follow the advice from https://github.com/launchbadge/sqlx/blob/main/FAQ.md#how-can-i-bind-an-array-to-a-values-clause-how-can-i-do-bulk-inserts
     let file_full_path_values: Vec<String> =
         file_jobs.iter().map(|f| f.file_full_path.clone()).collect();
-    let job_name_values: Vec<String> = file_jobs.iter().map(|f| f.job_name.clone()).collect();
+    let preset_name_values: Vec<String> = file_jobs.iter().map(|f| f.preset_name.clone()).collect();
     let created_at_values: Vec<PrimitiveDateTime> =
         file_jobs.iter().map(|f| f.created_at).collect();
     let finished_at_values: Vec<Option<PrimitiveDateTime>> =
@@ -126,17 +126,17 @@ pub async fn upsert_file_jobs(db: &Pool<Postgres>, file_jobs: Vec<FileJob>) -> R
     sqlx
     ::query!(
         r#"
-        INSERT INTO file_jobs (file_full_path, job_name, created_at, finished_at, command, command_log, has_succeeded)
+        INSERT INTO file_jobs (file_full_path, preset_name, created_at, finished_at, command, command_log, has_succeeded)
         SELECT
           t.file_full_path::TEXT,
-          t.job_name::TEXT,
+          t.preset_name::TEXT,
           t.created_at::TIMESTAMP,
           t.finished_at::TIMESTAMP,
           t.command::TEXT,
           t.command_log::TEXT,
           t.has_succeeded::BOOL
-        FROM UNNEST($1::TEXT[], $2::TEXT[], $3::TIMESTAMP[], $4::TIMESTAMP[], $5::TEXT[], $6::TEXT[], $7::BOOL[]) AS t (file_full_path, job_name, created_at, finished_at, command, command_log, has_succeeded)
-        ON CONFLICT (file_full_path, job_name) DO UPDATE
+        FROM UNNEST($1::TEXT[], $2::TEXT[], $3::TIMESTAMP[], $4::TIMESTAMP[], $5::TEXT[], $6::TEXT[], $7::BOOL[]) AS t (file_full_path, preset_name, created_at, finished_at, command, command_log, has_succeeded)
+        ON CONFLICT (file_full_path, preset_name) DO UPDATE
         SET
           finished_at = EXCLUDED.finished_at,
           command = EXCLUDED.command,
@@ -144,7 +144,7 @@ pub async fn upsert_file_jobs(db: &Pool<Postgres>, file_jobs: Vec<FileJob>) -> R
           has_succeeded = EXCLUDED.has_succeeded;
         "#,
         &file_full_path_values[..],
-        &job_name_values[..],
+        &preset_name_values[..],
         &created_at_values[..],
         &finished_at_values[..]: Vec<Option<PrimitiveDateTime>>,
         &command_values[..]: Vec<Option<String>>,
@@ -268,7 +268,7 @@ pub async fn upsert_file(db: &Pool<Postgres>, file: File) -> Result<File> {
     Ok(file)
 }
 
-pub async fn get_unprocessed_files_for_a_given_job_name(
+pub async fn get_unprocessed_files_for_a_given_preset_name(
     db: &Pool<Postgres>,
     preset_name: &str,
     offset: i64,
@@ -290,7 +290,7 @@ pub async fn get_unprocessed_files_for_a_given_job_name(
             files.file_modified_at as "file_modified_at!",
             files.job_id as "job_id!"
              from files
-             LEFT JOIN file_jobs ON files.file_full_path = file_jobs.file_full_path AND file_jobs.job_name = $1
+             LEFT JOIN file_jobs ON files.file_full_path = file_jobs.file_full_path AND file_jobs.preset_name = $1
              WHERE file_jobs.finished_at IS NULL
              ORDER BY files.folder_full_path
              OFFSET $2 ROWS
@@ -305,7 +305,7 @@ pub async fn get_unprocessed_files_for_a_given_job_name(
     Ok(files)
 }
 
-pub async fn get_unprocessed_file_jobs_for_a_given_job_name_and_files(
+pub async fn get_unprocessed_file_jobs_for_a_given_preset_name_and_files(
     db: &Pool<Postgres>,
     preset_name: &str,
     files: &[File],
@@ -314,18 +314,18 @@ pub async fn get_unprocessed_file_jobs_for_a_given_job_name_and_files(
         .iter()
         .map(|f| f.file_full_path.clone())
         .collect::<Vec<String>>();
-    let job_names = files
+    let preset_names = files
         .iter()
         .map(|_| preset_name.to_owned())
         .collect::<Vec<String>>();
 
     let file_jobs = sqlx::query_as!(
         FileJob,
-        r#"SELECT * from file_jobs where (file_full_path, job_name) IN (
+        r#"SELECT * from file_jobs where (file_full_path, preset_name) IN (
             SELECT unnest($1::text[]), unnest($2::text[])
         )"#,
         &file_full_paths[..],
-        &job_names[..]
+        &preset_names[..]
     )
         .fetch_all(db)
         .await?;
@@ -338,9 +338,9 @@ pub async fn get_unprocessed_file_and_jobs(
     offset: i64,
     limit: i64,
 ) -> Result<Vec<(File, FileJob)>> {
-    let files = get_unprocessed_files_for_a_given_job_name(db, preset_name, offset, limit).await?;
+    let files = get_unprocessed_files_for_a_given_preset_name(db, preset_name, offset, limit).await?;
     let file_jobs =
-        get_unprocessed_file_jobs_for_a_given_job_name_and_files(db, preset_name, &files).await?;
+        get_unprocessed_file_jobs_for_a_given_preset_name_and_files(db, preset_name, &files).await?;
 
     Ok(files.into_iter().zip(file_jobs.into_iter()).collect())
 }

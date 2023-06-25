@@ -46,13 +46,13 @@ CREATE INDEX idx_files_fk_job_id ON files(job_id);
 create table if not exists file_jobs
 (
     file_full_path TEXT NOT NULL,
-    job_name TEXT NOT NULL,
+    preset_name TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL,
     finished_at TIMESTAMP,
     command TEXT,
     command_log TEXT,
     has_succeeded BOOL,
-    PRIMARY KEY(file_full_path, job_name),
+    PRIMARY KEY(file_full_path, preset_name),
     CONSTRAINT fk_file_full_path FOREIGN KEY (file_full_path) REFERENCES files(file_full_path)
 );
 CREATE INDEX idx_file_jobs_fk_file_full_path ON file_jobs (file_full_path);

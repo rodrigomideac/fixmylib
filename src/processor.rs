@@ -219,7 +219,7 @@ pub async fn create_file_jobs_for_unprocessed_files(
     let mut count = 0;
     loop {
         let files =
-            db::get_unprocessed_files_for_a_given_job_name(&ctx.db, preset_name, offset, limit)
+            db::get_unprocessed_files_for_a_given_preset_name(&ctx.db, preset_name, offset, limit)
                 .await?;
         if files.is_empty() {
             break;
@@ -238,7 +238,7 @@ pub async fn create_file_jobs_for_unprocessed_files(
             .into_iter()
             .map(|f| FileJob {
                 file_full_path: f.file_full_path,
-                job_name: preset_name.to_owned(),
+                preset_name: preset_name.to_owned(),
                 created_at: now(),
                 finished_at: None,
                 command: None,
@@ -313,7 +313,7 @@ impl Processor<'_> {
                      )| {
                         FileJob {
                             file_full_path: file.file_full_path,
-                            job_name: preset_name.to_owned(),
+                            preset_name: preset_name.to_owned(),
                             finished_at: Some(now()),
                             command: Some(command),
                             command_log: Some(command_log),
@@ -477,7 +477,7 @@ async fn save_failed_jobs_report(ctx: &AppContext) -> Result<()> {
     for job in failed_file_jobs {
         writer.write_record(&[
             job.file_full_path,
-            job.job_name,
+            job.preset_name,
             job.command.unwrap_or_default().replace('\n',"\\n"),
             job.command_log.unwrap_or_default().replace('\n',"\\n"),
         ])?;
