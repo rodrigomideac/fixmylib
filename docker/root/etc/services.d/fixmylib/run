@@ -1,0 +1,7 @@
+#!/usr/bin/with-contenv bash
+
+echo "Starting fixmylib..."
+
+cd /app || exit 1
+
+exec s6-setuidgid fixmylib ./fixmylib

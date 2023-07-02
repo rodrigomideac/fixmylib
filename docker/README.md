@@ -1,0 +1,7 @@
+It may seem odd the Dockerfile structure, but considering that `fixmylib` provides hardware transcoding via Docker container we face a few challenges:
+- Mounted devices (such as Intel iGPU `/dev/dri/renderD128`) inherit the Group ID (GID) from the host. The GID might not exist in the container yet [[1]](https://github.com/openvinotoolkit/docker_ci/blob/master/configure_gpu_ubuntu20.md).
+- Since it is a good practice to drop privileges and not run as a root apps within the container, the target user might not belong to the mounted device group;
+
+The `lsiobase` [base container] that we use here is used in several containerized apps that rely on hardware transcoding (such as Plex) [[2]](https://github.com/linuxserver/docker-plex/blob/7e4c9b7140e32beea576c035c8e747f62e34baf7/Dockerfile#L1). They solved the following issues by using S6 overlay [[3]]((https://github.com/just-containers/s6-overlay#dropping-privileges)), which is a supervisor that can handle multiples long-running processes within a container, and provides a way to run scripts at "runtime" and define services.
+
+In the container, the s6 overlay will run all scripts from `/etc/cont-init.d` as first thing. Scripts on there will setup the proper permissions and groups for hardware transcoding. Then, the services from `/etc/services.d/` are initialized: in our case we have only one service called `fixmylib`. The s6 overlay rely on the Docker entrypoint being `/init` to work as a supervisor.

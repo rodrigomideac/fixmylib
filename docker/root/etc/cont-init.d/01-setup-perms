@@ -1,0 +1,13 @@
+#!/usr/bin/with-contenv bash
+
+groupmod -o -g "${PGID}" fixmylib
+usermod -o -u "${PUID}" fixmylib
+
+chown -R ${PUID}:${PGID} \
+    "${HOME}"
+
+if [ ! -f /firstRun ]; then
+    chown -R ${PUID}:${PGID} /app
+    chmod a+rwx -R /app/fixmylib
+    touch /firstRun
+fi

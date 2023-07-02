@@ -46,9 +46,6 @@ services:
 
   fixmylib:
     image: rodrigomideac/fixmylib:latest
-    group_add:
-      - "109"
-      - "989"
     environment:
       # The following envvars are the default values. You can omit them if you are not going to customize.
       
@@ -76,7 +73,7 @@ services:
       - IMAGE_CONVERTER_THREADS=4
       
       # Set concurrency for video conversion. Good results for both Hardware and Software transcoding were obtained for the value 1.
-      - VIDEO_CONVERTER_THREADS=2
+      - VIDEO_CONVERTER_THREADS=1
 
       # Set time to wait between new file discovery by scanner job.  
       - SECONDS_BETWEEN_FILE_SCANS=600
@@ -101,7 +98,7 @@ services:
 
 Now run it with `docker compose up`.
 
-Any failed conversion can be checked in the Postgres table `file_jobs`. You can use a tool such as [DBeaver](https://github.com/dbeaver/dbeaver) to do so. 
+Any failed conversion will be reported in the file `processing_errors.csv` at the `/media-out` folder. 
 
 ## Project Vision and Roadmap
 This project has the aspiration of being a [photoview](https://github.com/photoview/photoview) but with write features. Upcoming features:
@@ -115,3 +112,4 @@ This project has the aspiration of being a [photoview](https://github.com/photov
 [Tdarr](https://github.com/HaveAGitGat/Tdarr) worked great for its purpose of having a way to convert videos to a desired preset. However, I found its UI a little confusing, and it lacked capability to convert photos. 
 
 [Fileflows](https://github.com/revenz/FileFlows) had a better UI, but again, it lacked the feature of converting HEIF photos.
+
