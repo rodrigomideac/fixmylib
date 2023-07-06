@@ -76,7 +76,7 @@ services:
       - VIDEO_CONVERTER_THREADS=1
 
       # Set time to wait between new file discovery by scanner job.  
-      - SECONDS_BETWEEN_FILE_SCANS=600
+      - SECONDS_BETWEEN_FILE_SCANS=3600
 
       # Set time to wait between checks for new discovered files that haven't been processed yet.
       - SECONDS_BETWEEN_PROCESSOR_RUNS=10

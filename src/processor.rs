@@ -173,6 +173,7 @@ impl FileToBeProcessed<'_> {
 pub async fn run(ctx: &AppContext) -> Result<()> {
     loop {
         info!("Checking for unprocessed files...");
+        let mut total_processed_files_count = 0;
         for preset_name in get_preset_names(ctx) {
             debug!("Creating jobs for preset {preset_name}");
             let ticker = Ticker::new();
@@ -183,15 +184,19 @@ pub async fn run(ctx: &AppContext) -> Result<()> {
                 .process_pending_file_jobs(&preset_name)
                 .await
                 .expect("it should work flawless to process files");
-            if processed_files_count != 0 {
+            if processed_files_count > 0 {
                 ticker.elapsed(format!(
                     "to process unprocessed files for {preset_name} preset."
                 ))
             }
+            total_processed_files_count += processed_files_count
         }
 
-        debug!("Going to save reports...");
-        save_failed_jobs_report(ctx).await?;
+        if total_processed_files_count > 0 {
+            debug!("Going to save reports...");
+            save_failed_jobs_report(ctx).await?;
+        }
+
         sleep(Duration::from_secs(
             ctx.config.seconds_between_processor_runs,
         ))
