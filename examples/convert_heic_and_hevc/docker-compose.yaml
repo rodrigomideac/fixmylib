@@ -1,7 +1,8 @@
-version: "2"
 services:
   fixmylib-db:
     image: postgres:14
+    networks:
+      - fixmylib-network
     ports:
       - "5432:5432"
     volumes:
@@ -11,6 +12,10 @@ services:
 
   fixmylib:
     image: rodrigomideac/fixmylib:latest
+    networks:
+      - fixmylib-network
+    depends_on:
+      - fixmylib-db
     environment:
       - DATABASE_URL=postgresql://postgres:fixmylib@fixmylib-db/postgres
     volumes:
@@ -18,3 +23,7 @@ services:
       - ../media-in:/media-in
     devices:
       - /dev/dri:/dev/dri
+
+networks:
+  fixmylib-network:
+    driver: bridge
